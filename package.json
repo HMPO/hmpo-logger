@@ -24,18 +24,18 @@
   "homepage": "https://github.com/UKHomeOffice/passports-logger#readme",
   "dependencies": {
     "async": "^3.2.3",
-    "debug": "^4.3.3",
+    "debug": "^4.3.4",
     "glob": "^7.2.0",
     "on-finished": "^2.4.1",
     "on-headers": "^1.0.1",
     "sort-object-keys": "^1.1.2",
     "underscore": "^1.13.2",
-    "winston": "^2.4.5"
+    "winston": "^3.7.2"
   },
   "devDependencies": {
     "chai": "^4.3.6",
-    "eslint": "^8.10.0",
-    "mocha": "^9.2.1",
+    "eslint": "^8.13.0",
+    "mocha": "^9.2.2",
     "nyc": "^15.1.0",
     "sinon": "^13.0.1",
     "sinon-chai": "^3.7.0",
