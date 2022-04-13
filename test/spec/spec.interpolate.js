@@ -10,10 +10,31 @@ describe('interpolate', function () {
             interpolate.cleanValue('s').should.equal('s');
             interpolate.cleanValue(1).should.equal(1);
             interpolate.cleanValue(true).should.equal(true);
-            let date = new Date();
-            interpolate.cleanValue(date).should.equal(date);
             expect(interpolate.cleanValue(null)).to.equal(null);
             expect(interpolate.cleanValue(undefined)).to.equal(undefined);
+        });
+
+        it('should stringify dates', function () {
+            let date = new Date();
+            let iso = date.toISOString();
+            interpolate.cleanValue(date).should.equal(iso);
+
+            let dateNumber = date.getTime();
+            interpolate.cleanValue(dateNumber).should.equal(iso);
+        });
+
+        it('should not stringify dates if isoDates is disabled', function () {
+            let date = new Date();
+            interpolate.cleanValue(date, { isoDates: false }).should.equal(date);
+
+            let dateNumber = date.getTime();
+            interpolate.cleanValue(dateNumber, { isoDates: false }).should.equal(dateNumber);
+        });
+
+        it('should truncate strings that are too long', function () {
+            const longtext = new Array(20).join('A');
+            const result = interpolate.cleanValue(longtext, { maxLength: 10 });
+            result.should.equal('AAAAAAAAAA...');
         });
 
         it('should stringify objects and arrays', function () {
@@ -35,15 +56,23 @@ describe('interpolate', function () {
                 '{"number":1,"boolean":true,"string":"s","array":[1,"2",{"3":"3"},[4],true],"object":{"string":"s","number":1},"null":null}');
         });
 
-        it('should return ? if it cant process an object', function () {
-            let obj1 = {}; let obj2 = {};
+    });
 
-            obj2.circular = obj1;
-            obj1.circular = obj2;
+    describe('stringify', function () {
+        it('should limit the number of objects that are stringified', function () {
+            const result = interpolate.stringify({
+                deep: { deep: { deep: { deep: { deep: { deep: { deep: { deep: { deep: { deep: {}}}}}}}}}}
+            });
 
-            interpolate.cleanValue(obj1).should.equal('?');
+            result.should.equal('{"deep":{"deep":{"deep":{"deep":{"deep":{"deep":{"deep":{"deep":{"deep":{"deep":"[object Object]"}}}}}}}}}}');
+        });
+
+        it('should return undefined if an error is thrown', function () {
+            const result = interpolate.stringify({ toJSON: () => { throw new Error(); }});
+            expect(result).to.be.undefined;
         });
     });
+
 
     describe('getTokenValue', function () {
         let source = {

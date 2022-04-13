@@ -1,7 +1,6 @@
 
 let Logger = require('../../lib/logger');
 let Manager = require('../../lib/manager');
-let winston = require('winston');
 let IncomingMessage = require('http').IncomingMessage;
 
 
@@ -19,7 +18,6 @@ describe('logger instance', function () {
         let logger = new Logger('testname');
         logger.should.be.an('object');
         logger.should.be.instanceof(Logger);
-        logger.should.be.instanceof(winston.Logger);
         logger._name.should.equal('testname');
     });
 
@@ -118,122 +116,165 @@ describe('logger instance', function () {
 
 
     describe('log', function () {
-        let logger;
-        let logSpy;
+        let logger, manager, cb;
 
         beforeEach(function () {
-            logSpy = sinon.stub(winston.Logger.prototype, 'log');
-            let manager = new Manager();
+            manager = new Manager();
+            sinon.stub(manager, '_logToTransports');
             delete global.GlobalHmpoLogger;
             manager.config();
             logger = new Logger('test', manager);
-        });
-
-        afterEach(function () {
-            logSpy.restore();
+            cb = sinon.stub();
         });
 
         it('should default no metadata and unknown label if no args given to logger instance', function () {
-            logger = new Logger();
-            logger.log('info', 'message', {});
+            logger = new Logger(null, manager);
+            logger.log('info', 'message', { foo: 'bar'}, cb);
 
-            logSpy.should.have.been.calledWithExactly('info', 'message', { label: 'Unknown'});
+            manager._logToTransports.should.have.been.calledWithExactly({
+                '@timestamp': sinon.match.string,
+                label: 'Unknown',
+                '@level': 'info',
+                level: 'INFO',
+                foo: 'bar',
+                host: sinon.match.string,
+                message: 'message'
+            }, cb);
+        });
+
+        it('should forward level methods to the log method', function () {
+            logger = new Logger('test', manager);
+            logger.info('message', { foo: 'bar'}, cb);
+
+            manager._logToTransports.should.have.been.calledWithExactly({
+                '@timestamp': sinon.match.string,
+                label: 'test',
+                '@level': 'info',
+                level: 'INFO',
+                foo: 'bar',
+                host: sinon.match.string,
+                message: 'message'
+            }, cb);
+        });
+
+        it('should allow arg placeholders in the message', function () {
+            logger = new Logger('test', manager);
+            logger.log('info', 'message %s', 'arg', { foo: 'bar'}, cb);
+
+            manager._logToTransports.should.have.been.calledWithExactly(sinon.match({
+                level: 'INFO',
+                foo: 'bar',
+                message: 'message arg'
+            }), cb);
         });
 
         it('should default to info and empty message if no args are given', function () {
             logger.log();
 
-            logSpy.should.have.been.calledWithExactly('info', '', sinon.match.object);
-        });
-
-        it('should add the logger name and host to the log meta', function () {
-            logger.log('info', 'message');
-
-            logSpy.should.have.been.calledWithExactly(
-                'info', 'message',
-                sinon.match({
-                    label: 'test',
-                    host: sinon.match.string
-                }));
+            manager._logToTransports.should.have.been.calledWithExactly({
+                '@timestamp': sinon.match.string,
+                label: 'test',
+                '@level': 'debug',
+                level: 'DEBUG',
+                host: sinon.match.string,
+                message: ''
+            }, undefined);
         });
 
         it('should pick up error from metadata', function () {
-            logger.log('info', 'an error :err.message', { err: new Error('test') });
+            const err = new Error('an error message test');
+            err.code = 'A_CODE';
+            logger.log('info', 'message', err);
 
-            logSpy.should.have.been.calledWithExactly('info', 'an error test',
-                sinon.match.instanceOf(Error).and(sinon.match({
-                    label: 'test',
-                    host: sinon.match.string
-                }))
-            );
+            manager._logToTransports.should.have.been.calledWithExactly({
+                '@timestamp': sinon.match.string,
+                label: 'test',
+                '@level': 'info',
+                level: 'INFO',
+                stack: sinon.match.array,
+                code: 'A_CODE',
+                host: sinon.match.string,
+                message: 'message'
+            }, undefined);
         });
 
-        it('should identify metadata as error', function () {
-            logger.log('info', 'an error :err.message', new Error('test'));
+        it('should use the message and original object from the an error', function () {
+            const err = new Error('an error message test');
+            err.code = 'A_CODE';
+            err.obj = { complex: 'object' };
+            err.original = { foo: 'bar' };
+            err.constructor = 'bad constructor injection'; // should be ignored
+            logger.log('info', '', err);
 
-            logSpy.should.have.been.calledWithExactly('info', 'an error test',
-                sinon.match.instanceOf(Error).and(sinon.match({
-                    label: 'test',
-                    host: sinon.match.string
-                }))
-            );
-        });
-
-        it('passes a callback through to the winston logger if specified', function () {
-            let cb = sinon.spy();
-            logger.log('info', 'message', cb);
-
-            logSpy.should.have.been.calledWithExactly(
-                'info', 'message',
-                sinon.match({
-                    label: 'test',
-                    host: sinon.match.string
-                }),
-                cb);
+            manager._logToTransports.should.have.been.calledWithExactly({
+                '@timestamp': sinon.match.string,
+                label: 'test',
+                '@level': 'info',
+                level: 'INFO',
+                stack: sinon.match.array,
+                code: 'A_CODE',
+                original: {foo: 'bar'},
+                host: sinon.match.string,
+                message: 'an error message test'
+            }, undefined);
         });
 
         it('should add meta placeholders to the message', function () {
-            logger.log('info', 'message :test1 :test2 :notfound',
-                {test1: 'metadata', test2: 4});
+            logger.log('info', 'message :test1 :test2 :json.deep[0] :notfound',
+                {test1: 'metadata', json: { deep: [ 'object' ]}, test2: 4});
 
-            logSpy.should.have.been.calledWithExactly(
-                'info', 'message metadata 4 -',
-                sinon.match({
-                    label: 'test',
-                    host: sinon.match.string,
-                    test1: 'metadata',
-                    test2: 4
-                }));
+            manager._logToTransports.should.have.been.calledWithExactly(sinon.match({
+                message: 'message metadata 4 object -'
+            }), undefined);
         });
 
         it('should decoded a req object in meta', function () {
             let req = new IncomingMessage();
+            req.method = 'GET';
             req.sessionID = 'abc123';
             req.originalUrl = '/abc/123';
             req.url = '/123';
-
-            logger.log('info', 'message', {req: req});
-
-            logSpy.should.have.been.calledWithExactly(
-                'info', 'message',
-                sinon.match({
-                    label: 'test',
-                    host: sinon.match.string,
-                    sessionID: 'abc123',
-                    request: '/abc/123'
-                }));
-        });
-
-        it('should pull res out of req object in meta', function () {
-            let req = {
-                res: {
-                    responseTime: 1234567
-                }
+            req.res = {
+                statusCode: 200,
+                responseTime: 5000
             };
 
-            logger.log('info', 'message :responseTime', {req: req});
+            logger.log('request', 'message', {req});
 
-            logSpy.should.have.been.calledWithExactly('info', 'message 1234567', sinon.match.object);
+            manager._logToTransports.should.have.been.calledWithExactly(sinon.match({
+                message: 'message',
+                label: 'test',
+                host: sinon.match.string,
+                sessionID: 'abc123',
+                method: 'GET',
+                request: '/abc/123',
+                response: 200,
+                responseTime: 5000
+            }), undefined);
+        });
+
+        it('should deal with there being no meta config', function () {
+            let req = new IncomingMessage();
+            req.method = 'GET';
+            req.sessionID = 'abc123';
+            req.originalUrl = '/abc/123';
+            req.url = '/123';
+            req.res = {
+                statusCode: 200,
+                responseTime: 5000
+            };
+
+            manager._options = {};
+
+            logger.log('request', 'message', {req});
+
+            manager._logToTransports.should.have.been.calledWithExactly({
+                '@timestamp': sinon.match.string,
+                '@level': 'request',
+                level: 'REQUEST',
+                label: 'test',
+                message: 'message'
+            }, undefined);
         });
 
         it('should pull req out of res object in meta', function () {
@@ -243,53 +284,20 @@ describe('logger instance', function () {
                 }
             };
 
-            logger.log('info', 'message :request', {res: res});
+            logger.log('info', 'message :request', {res});
 
-            logSpy.should.have.been.calledWithExactly('info', 'message testurl', sinon.match.object);
-        });
-
-        it('should decoded additional info from req object if level is request', function () {
-            let req = new IncomingMessage();
-            req.sessionID = 'abc123';
-            req.originalUrl = '/abc/123';
-            req.method = 'GET';
-            req.url = '/123';
-
-            let res = {
-                responseTime: 5000
-            };
-
-            logger.log('request', 'message', {req: req, res: res});
-
-            logSpy.should.have.been.calledWithExactly(
-                'request', 'message',
-                sinon.match({
-                    label: 'test',
-                    host: sinon.match.string,
-                    sessionID: 'abc123',
-                    method: 'GET',
-                    request: '/abc/123',
-                    responseTime: 5000
-                }));
+            manager._logToTransports.should.have.been.calledWithExactly(sinon.match({ message: 'message testurl' }), undefined);
         });
 
         it('should decode an unpopulated req object in meta', function () {
             let req = new IncomingMessage();
 
-            logger.log('info', 'message', {req: req});
+            logger.log('info', 'message', {req});
 
-            logSpy.should.have.been.calledWithExactly(
-                'info', 'message',
-                sinon.match({
-                    label: 'test',
-                    host: sinon.match.string,
-                    request: ''
-                }));
+            manager._logToTransports.should.have.been.calledWithExactly(sinon.match({ request: '' }), undefined);
         });
 
     });
-
-
 
     describe('tokens', function () {
 
@@ -549,13 +557,19 @@ describe('logger instance', function () {
         it('should match a valid dot token', function () {
             let match = Logger.reToken().exec(':part1.part2.part3');
             expect(match).to.be.ok;
-            match[1].should.equal('part1.part2.part3');
+            match[2].should.equal('part1.part2.part3');
         });
         it('should match a valid dot and bracket token', function () {
             let match = Logger.reToken().exec(':part1.part2[part3]');
             expect(match).to.be.ok;
-            match[1].should.equal('part1.part2');
-            match[3].should.equal('part3');
+            match[2].should.equal('part1.part2');
+            match[4].should.equal('part3');
+        });
+
+        it('should match a percentage placeholder', function () {
+            let match = Logger.reToken().exec('blah %s blah');
+            expect(match).to.be.ok;
+            match[1].should.equal('%');
         });
     });
 
