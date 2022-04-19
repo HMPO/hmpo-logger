@@ -16,20 +16,20 @@ Logging messages:
 ```javascript
 var logger = require('hmpo-logger').get();
 
-logger.log('error', 'This is an error');
+logger.log('error', 'This is an error', err);
 logger.warn('This is a warning');
 logger.warn('This is an %s warning', 'interpolated');
 logger.info('This is just info with :meta', {meta: 'metavalue'});
-logger.info(':method :url took :responseTime ms and was res[content-length] bytes', {req: req, res: res});
+logger.info(':method :url took :responseTime ms and was res[content-length] bytes', {req, res});
 
 logger.log('info', 'response :responseText', { responseText: logger.trimHtml(htmlBody, 100)});
 ```
 
-*Note: try to include `req` in your log metadata where possible to decorate your log entries with info about the current express request*
+*Note: Try to include `req` in your log metadata where possible to decorate your log entries with info about the current express request*
 
 ### `get(name)`
 
-Get a named winston logger. The name is prepended to the log entry messages.
+Get a named logger. The name places in the `label` log property and is prepended to the console log entry messages.
 
 ```javascript
 require('hmpo-logger').get(name);
@@ -52,10 +52,6 @@ Trim tags out of an HTML string to help with more concise HTML error response lo
 
 Returns a string, or passes through `text` if not a string.
 
-```javascript
-require('hmpo-logger').get(name);
-```
-
 
 ### `config(options)`
 
@@ -66,16 +62,24 @@ Initialise the logger at the top level of the app, specifying the log locations 
 ```javascript
 var hmpoLogger = require('hmpo-logger');
 hmpoLogger.config({ // defaults:
+    // shortcuts to auto-configure console and logfile transports
     console: true,
-    connsoleJSON: false,
     consoleLevel: 'debug',
+    connsoleJSON: false, // logstash json or pretty print output
     consoleColor: true,
-    app: './app.log',
-    appJSON: true,
+
+    app: undefined, // can be app log filename
     appLevel: 'info',
-    error: './error.log',
-    errorJSON: true,
-    errorLevel: 'exceptions',
+
+    error: undefined, // can be error log filename
+    errorLevel: 'error',
+    dateRotate: false,
+    maxFiles: 5,
+
+    // explicitly configured transports:
+    transports: [],
+
+    // metadata to add to all log lines
     meta: {
         host: 'host',
         pm: 'env.pm_id',
@@ -83,6 +87,8 @@ hmpoLogger.config({ // defaults:
         method: 'method',
         request: 'request'
     },
+
+    // metadata to add to `request` level logs
     requestMeta: {
         clientip: 'clientip',
         uniqueID: 'req.x-uniq-id',
@@ -94,13 +100,16 @@ hmpoLogger.config({ // defaults:
         httpversion: 'version',
         bytes: 'res.content-length'
     },
+
+    // catch unhandled exceptions and log them to the transports
+    handleExceptions: true,
+
+    // fine grain control for how requests are logged by the middleware method
+    format: ':clientip :sessionID :method :request HTTP/:httpVersion :statusCode :res[content-length] - :responseTime ms',
     logPublicRequests: false,
+    publicPattern: '/public/',
     logHealthcheckRequests: false,
-    sizeRotate: false,
-    dateRotate: false,
-    maxSize: 50 * 1024 * 1024,
-    maxFiles: 5,
-    format: ':clientip :sessionID :method :request HTTP/:httpVersion :statusCode :res[content-length] - :responseTime ms'
+    healthcheckPattern: '^/healthcheck(/|$)'
 });
 ```
 
@@ -121,22 +130,8 @@ Returns express compatible middleware
 
 ## Rotating Logfiles
 
-The config supports native winston log rotation based on file size and adds rotation based on the date. Both options cannot be specified at the same time. The settings apply to both the app and error log files.
+The config supports rotation based on the date using the `File` transport.
 
-### Rotating based on size
-```
-  sizeRotate: true,
-  maxSize: 50 * 1024 * 1024, // limit file to 50MB
-  maxFiles: 5, // keep 5 rotated files
-```
-The names of the log files will be incremented based on the log filename, eg:
-```
-/path/name.log
-/path/name.1.log
-/path/name.2.log
-```
-
-### Rotating based on date
 ```
   dateRotate: true,
   maxFiles: 5, // keep 5 rotated files
@@ -149,16 +144,67 @@ The names of the log files will include the year, month, and day and will be bas
 /path/name-2016-09-31.log
 ```
 
-### Additional winston transport options
-Winston options can be specified for the wrapped winston transports. These will override any options set by `hmpo-logger`, eg:
+### Additional transport options
+In addition to the config shortcuts for console, app and error logs, app options can be specified in option objects:
 ```
   consoleOptions: { // Console transport options
-    stderrLevels: [ 'error' ]
+    formatterOptions: { color: true }
   },
   appOptions: { // File transport options
     eol: '\t\n',
   },
   errorOptions: { // File transport options
-    maxRetries: 4    
+    level: 'fatal
   }
 ```
+
+If the app and error loggers have the same filename they will be merged into a single `File` transport.
+
+Alternatively transports can be specified programatically:
+
+```
+transports: [
+    {
+        name: 'My transport', // used in debugging logs
+        level: 'info', // log at this level and above
+
+        className: 'FileTransport',
+        // or specify a filename:
+        filename: 'file.log',
+        // or it will defaults to ConsoleTransport
+
+        // logstash formatter
+        formatter: 'logstash',
+        formatterOptions: {
+            maxLength: 500,
+            maxObjects: 10,
+            circular: '[circular]',
+            indent: 4
+        },
+
+        // pretty print formatter
+        formatter: 'pretty',
+        formatterOptions: {
+            color: true
+            // other `util.inspect` options
+        },
+
+        // raw json formatter
+        formatter: 'json',
+        formatterOptions: {
+            indent: 2
+        },
+
+        // other Console options:
+        eol: '\n\r',
+
+        // other File options:
+        fileMode: 0o666,
+        dateRotate: true,
+        maxFiles: 3,
+        eol: '\n'
+    }
+]
+```
+
+new transports can be added using `hmpoLogger.addTransportClass(Class, name)` and new formatters can be added with `hmpoLogger.addFormatter(formatterFnFactory, name)`
