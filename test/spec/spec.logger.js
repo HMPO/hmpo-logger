@@ -509,28 +509,10 @@ describe('logger instance', function () {
                     .should.equal('1234');
             });
 
-            it('should return ip from x-forwarded-for', function () {
+            it('should return ip from the processed request ip', function () {
                 let context = {
                     req: {
-                        headers: {
-                            'x-forwarded-for': '5678'
-                        },
-                        connection: {
-                            remoteAddress: '1234'
-                        }
-                    }
-                };
-
-                Logger.tokens.clientip.fn.call(context)
-                    .should.equal('5678');
-            });
-
-            it('should return ip from x-forwarded-for list', function () {
-                let context = {
-                    req: {
-                        headers: {
-                            'x-forwarded-for': '5678, 8910'
-                        },
+                        ip: '5678',
                         connection: {
                             remoteAddress: '1234'
                         }
