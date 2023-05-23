@@ -2,6 +2,7 @@
 const FileTransport = require('../../../lib/transports/file');
 const StreamTransport = require('../../../lib/transports/stream');
 const fs = require('fs');
+const path = require('path');
 const glob = require('glob');
 
 const formatter = v => v;
@@ -295,35 +296,45 @@ describe('FileTransport Class', function () {
     });
 
     describe('_removeOldFiles', function () {
-        let transport, cb;
+        let transport, globPromise;
 
         beforeEach(function () {
             transport = new FileTransport({ name, formatter, filename: '/path/test.log', dateRotate: true, maxFiles: 3 });
             sinon.stub(fs, 'unlink').yields();
-            transport._dateRotateGlob = sinon.stub();
+            globPromise = sinon.promise();
+            transport._dateRotateGlob = { glob: sinon.stub().returns(globPromise) };
         });
 
         afterEach(function () {
             fs.unlink.restore();
         });
 
-        it('does not remove files if maxFiles is zero', function () {
+        it('does not remove files if maxFiles is zero', function (done) {
             transport._options.maxFiles = 0;
-            transport._removeOldFiles();
-            transport._dateRotateGlob.should.not.have.been.called;
-            fs.unlink.should.not.have.been.called;
+            transport._removeOldFiles(() => {
+                fs.unlink.should.not.have.been.called;
+                done();
+            });
+
+            transport._dateRotateGlob.glob.should.not.have.been.called;
         });
 
         it('calls glob with a pattern based on the logname', function () {
             transport._removeOldFiles();
-            transport._dateRotateGlob.should.have.been.calledWithExactly(
-                '/path/test-*.log',
-                sinon.match.func
+            transport._dateRotateGlob.glob.should.have.been.calledWithExactly(
+                '/path/test-*.log'
             );
         });
 
-        it('calls fs.unlink for each of the oldest files outside of maxFiles', function () {
-            transport._dateRotateGlob.yields(null, [
+        it('calls fs.unlink for each of the oldest files outside of maxFiles', function (done) {
+            transport._removeOldFiles(() => {
+                fs.unlink.should.have.been.calledWithExactly('/path/test-2016-07-02.log', sinon.match.func);
+                fs.unlink.should.have.been.calledWithExactly('/path/test-2016-04-30.log', sinon.match.func);
+                fs.unlink.should.have.been.calledWithExactly('/path/test-2015-11-14.log', sinon.match.func);
+                done();
+            });
+
+            globPromise.resolve([
                 '/path/test-2016-11-15.log',
                 '/path/test-2016-07-02.log',
                 '/path/test-2016-12-13.log',
@@ -331,39 +342,78 @@ describe('FileTransport Class', function () {
                 '/path/test-2016-04-30.log',
                 '/path/test-2016-11-13.log'
             ]);
-            transport._removeOldFiles();
-            fs.unlink.should.have.been.calledWithExactly('/path/test-2016-07-02.log', sinon.match.func);
-            fs.unlink.should.have.been.calledWithExactly('/path/test-2016-04-30.log', sinon.match.func);
-            fs.unlink.should.have.been.calledWithExactly('/path/test-2015-11-14.log', sinon.match.func);
         });
 
-        it('does not remove files if number of files is equal to maxFiles', function () {
-            transport._dateRotateGlob.yields(null, [
+        it('does not remove files if number of files is equal to maxFiles', function (done) {
+            transport._removeOldFiles(() => {
+                fs.unlink.should.not.have.been.called;
+                done();
+            });
+
+            globPromise.resolve([
                 '/path/test-2015-11-14.log',
                 '/path/test-2016-07-02.log',
                 '/path/test-2016-04-30.log'
             ]);
-            transport._removeOldFiles(cb);
-            fs.unlink.should.not.have.been.called;
         });
 
-        it('does not remove files if number of files is less than maxFiles', function () {
-            transport._dateRotateGlob.yields(null, [
+        it('does not remove files if number of files is less than maxFiles', function (done) {
+            transport._removeOldFiles(() => {
+                fs.unlink.should.not.have.been.called;
+                done();
+            });
+
+            globPromise.resolve([
                 '/path/test-2015-11-14.log',
                 '/path/test-2016-04-30.log'
             ]);
-            transport._removeOldFiles(cb);
-            fs.unlink.should.not.have.been.called;
         });
 
-        it('does not remove files if there is a glob error', function () {
-            transport._dateRotateGlob.yields(null);
-            transport._removeOldFiles();
-            fs.unlink.should.not.have.been.called;
+        it('does not remove files if glob returns nothing', function (done) {
+            transport._removeOldFiles(() => {
+                fs.unlink.should.not.have.been.called;
+                done();
+            });
 
-            transport._dateRotateGlob.yields({ message: 'Error' });
-            transport._removeOldFiles();
-            fs.unlink.should.not.have.been.called;
+            globPromise.resolve();
+        });
+
+        it('does not remove files if there is a glob error', function (done) {
+            transport._removeOldFiles(() => {
+                fs.unlink.should.not.have.been.called;
+                done();
+            });
+
+            globPromise.reject(new Error());
+        });
+    });
+
+    describe('_removeOldFiles glob', function () {
+        let transport;
+
+        beforeEach(function () {
+            sinon.stub(fs, 'unlink').yields();
+        });
+
+        afterEach(function () {
+            fs.unlink.restore();
+        });
+
+        it('does not call fs.unlink if there are no files to remove', function (done) {
+            transport = new FileTransport({ name, formatter, filename: path.resolve(__dirname, '..', 'fixtures', 'otherlog.logfile'), dateRotate: true, maxFiles: 2 });
+            transport._removeOldFiles(() => {
+                fs.unlink.should.not.have.been.called;
+                done();
+            });
+        });
+
+        it('calls fs.unlink for each of the oldest files outside of maxFiles', function (done) {
+            transport = new FileTransport({ name, formatter, filename: path.resolve(__dirname, '..', 'fixtures', 'test.logfile'), dateRotate: true, maxFiles: 2 });
+            transport._removeOldFiles(() => {
+                fs.unlink.should.have.been.calledWithExactly(sinon.match('test-2016-11-15.logfile'), sinon.match.func);
+                fs.unlink.should.have.been.calledWithExactly(sinon.match('test-2016-12-13.logfile'), sinon.match.func);
+                done();
+            });
         });
     });
 
