@@ -238,6 +238,7 @@ describe('logger instance', function () {
                 statusCode: 200,
                 responseTime: 5000
             };
+            req.get = () => {};
 
             logger.log('request', 'message', {req});
 
@@ -529,6 +530,66 @@ describe('logger instance', function () {
             });
         });
 
+    });
+
+    describe('realClientIp', function () {
+        it('should return the host header from the request', function () {
+            const context = {
+                req: {
+                    get: function (header) {
+                        const headers = {
+                            'x-real-client-ip': '192.168.1.1', // TODO - Tidy these up
+                            'x-forwarded-for': '10.0.0.1',
+                            'host': 'example.com'
+                        };
+                        return headers[header.toLowerCase()];
+                    },
+                    headers: {
+                        'x-real-client-ip': '192.168.1.1',
+                        'x-forwarded-for': '10.0.0.1',
+                        'host': 'example.com'
+                    }
+                }
+            };
+
+            Logger.tokens.realClientIp.fn.call(context)
+                .should.equal('192.168.1.1');
+        });
+
+        it('should return undefined for no req', function () {
+            expect(Logger.tokens.realClientIp.fn.call({}))
+                .to.be.undefined;
+        });
+    });
+
+    describe('realClientIp', function () {
+        it('should return the host header from the request', function () {
+            const context = {
+                req: {
+                    get: function (header) {
+                        const headers = {
+                            'x-real-client-ip': '192.168.1.1', // TODO - Tidy these up
+                            'x-forwarded-for': '10.0.0.1',
+                            'host': 'example.com'
+                        };
+                        return headers[header.toLowerCase()];
+                    },
+                    headers: {
+                        'x-real-client-ip': '192.168.1.1',
+                        'x-forwarded-for': '10.0.0.1',
+                        'host': 'example.com'
+                    }
+                }
+            };
+
+            Logger.tokens.realClientIp.fn.call(context)
+                .should.equal('192.168.1.1');
+        });
+
+        it('should return undefined for no req', function () {
+            expect(Logger.tokens.realClientIp.fn.call({}))
+                .to.be.undefined;
+        });
     });
 
     describe('reToken', function () {
