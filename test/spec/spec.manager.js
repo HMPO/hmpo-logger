@@ -241,6 +241,8 @@ describe('instance', function () {
                 foo: 'bar',
                 httpversion: 'version',
                 port: 'port',
+                realClientIp: 'realClientIp',
+                forwardedFor: 'forwardedFor',
                 remoteAddress: 'connection.remoteAddress',
                 response: 'statusCode',
                 responseTime: 'responseTime',
@@ -300,7 +302,7 @@ describe('instance', function () {
         });
 
         it('should build transports from full config inclusing custom transport', function () {
-            class MyTransport extends manager.transportClasses.FileTransport {}
+            class MyTransport extends manager.transportClasses.FileTransport { }
             manager.addTransportClass(MyTransport);
 
             manager.config({

@@ -129,7 +129,7 @@ describe('logger instance', function () {
 
         it('should default no metadata and unknown label if no args given to logger instance', function () {
             logger = new Logger(null, manager);
-            logger.log('info', 'message', { foo: 'bar'}, cb);
+            logger.log('info', 'message', { foo: 'bar' }, cb);
 
             manager._logToTransports.should.have.been.calledWithExactly({
                 '@timestamp': sinon.match.string,
@@ -144,7 +144,7 @@ describe('logger instance', function () {
 
         it('should forward level methods to the log method', function () {
             logger = new Logger('test', manager);
-            logger.info('message', { foo: 'bar'}, cb);
+            logger.info('message', { foo: 'bar' }, cb);
 
             manager._logToTransports.should.have.been.calledWithExactly({
                 '@timestamp': sinon.match.string,
@@ -159,7 +159,7 @@ describe('logger instance', function () {
 
         it('should allow arg placeholders in the message', function () {
             logger = new Logger('test', manager);
-            logger.log('info', 'message %s', 'arg', { foo: 'bar'}, cb);
+            logger.log('info', 'message %s', 'arg', { foo: 'bar' }, cb);
 
             manager._logToTransports.should.have.been.calledWithExactly(sinon.match({
                 level: 'INFO',
@@ -213,7 +213,7 @@ describe('logger instance', function () {
                 level: 'INFO',
                 stack: sinon.match.array,
                 code: 'A_CODE',
-                original: {foo: 'bar'},
+                original: { foo: 'bar' },
                 host: sinon.match.string,
                 message: 'an error message test'
             }, undefined);
@@ -221,7 +221,7 @@ describe('logger instance', function () {
 
         it('should add meta placeholders to the message', function () {
             logger.log('info', 'message :test1 :test2 :json.deep[0] :notfound',
-                {test1: 'metadata', json: { deep: [ 'object' ]}, test2: 4});
+                { test1: 'metadata', json: { deep: ['object'] }, test2: 4 });
 
             manager._logToTransports.should.have.been.calledWithExactly(sinon.match({
                 message: 'message metadata 4 object -'
@@ -238,8 +238,9 @@ describe('logger instance', function () {
                 statusCode: 200,
                 responseTime: 5000
             };
+            req.get = () => { };
 
-            logger.log('request', 'message', {req});
+            logger.log('request', 'message', { req });
 
             manager._logToTransports.should.have.been.calledWithExactly(sinon.match({
                 message: 'message',
@@ -266,7 +267,7 @@ describe('logger instance', function () {
 
             manager._options = {};
 
-            logger.log('request', 'message', {req});
+            logger.log('request', 'message', { req });
 
             manager._logToTransports.should.have.been.calledWithExactly({
                 '@timestamp': sinon.match.string,
@@ -284,7 +285,7 @@ describe('logger instance', function () {
                 }
             };
 
-            logger.log('info', 'message :request', {res});
+            logger.log('info', 'message :request', { res });
 
             manager._logToTransports.should.have.been.calledWithExactly(sinon.match({ message: 'message testurl' }), undefined);
         });
@@ -292,7 +293,7 @@ describe('logger instance', function () {
         it('should decode an unpopulated req object in meta', function () {
             let req = new IncomingMessage();
 
-            logger.log('info', 'message', {req});
+            logger.log('info', 'message', { req });
 
             manager._logToTransports.should.have.been.calledWithExactly(sinon.match({ request: '' }), undefined);
         });
@@ -453,7 +454,7 @@ describe('logger instance', function () {
             });
 
             it('should return undefined for no getHeaders', function () {
-                expect(Logger.tokens.res.fn.call({res: {}}, 'test'))
+                expect(Logger.tokens.res.fn.call({ res: {} }, 'test'))
                     .to.be.undefined;
             });
 
@@ -485,7 +486,7 @@ describe('logger instance', function () {
             });
 
             it('should return undefined for no headers', function () {
-                expect(Logger.tokens.req.fn.call({res: {}}, 'test'))
+                expect(Logger.tokens.req.fn.call({ res: {} }, 'test'))
                     .to.be.undefined;
             });
 
@@ -529,6 +530,66 @@ describe('logger instance', function () {
             });
         });
 
+    });
+
+    describe('realClientIp', function () {
+        it('should return the x-real-client-ip header from the request', function () {
+            const context = {
+                req: {
+                    get: function (header) {
+                        const headers = {
+                            'x-real-client-ip': '192.168.1.1',
+                            'x-forwarded-for': '10.0.0.1',
+                            'host': 'example.com'
+                        };
+                        return headers[header.toLowerCase()];
+                    },
+                    headers: {
+                        'x-real-client-ip': '192.168.1.1',
+                        'x-forwarded-for': '10.0.0.1',
+                        'host': 'example.com'
+                    }
+                }
+            };
+
+            Logger.tokens.realClientIp.fn.call(context)
+                .should.equal('192.168.1.1');
+        });
+
+        it('should return undefined for no req', function () {
+            expect(Logger.tokens.realClientIp.fn.call({}))
+                .to.be.undefined;
+        });
+    });
+
+    describe('forwardedFor', function () {
+        it('should return the x-forwarded-for header from the request', function () {
+            const context = {
+                req: {
+                    get: function (header) {
+                        const headers = {
+                            'x-real-client-ip': '192.168.1.1',
+                            'x-forwarded-for': '10.0.0.1',
+                            'host': 'example.com'
+                        };
+                        return headers[header.toLowerCase()];
+                    },
+                    headers: {
+                        'x-real-client-ip': '192.168.1.1',
+                        'x-forwarded-for': '10.0.0.1',
+                        'host': 'example.com'
+                    }
+                }
+            };
+
+            Logger.tokens.forwardedFor.fn.call(context)
+                .should.equal('10.0.0.1');
+        });
+
+        it('should return undefined for no req', function () {
+            expect(Logger.tokens.forwardedFor.fn.call({}))
+                .to.be.undefined;
+        });
     });
 
     describe('reToken', function () {
