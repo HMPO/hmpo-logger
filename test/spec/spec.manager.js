@@ -242,6 +242,7 @@ describe('instance', function () {
                 httpversion: 'version',
                 port: 'port',
                 realClientIp: 'realClientIp',
+                forwardedFor: 'forwardedFor',
                 remoteAddress: 'connection.remoteAddress',
                 response: 'statusCode',
                 responseTime: 'responseTime',
