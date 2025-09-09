@@ -24,8 +24,8 @@
   },
   "homepage": "https://github.com/HMPO/hmpo-logger#readme",
   "dependencies": {
-    "chalk": "^4.1.2",
-    "debug": "^4.3.7",
+    "chalk": "4.1.2",
+    "debug": "4.3.7",
     "deep-clone-merge": "^1.5.5",
     "glob": "^11.0.0",
     "on-finished": "^2.4.1",
