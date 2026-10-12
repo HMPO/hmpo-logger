@@ -60,6 +60,15 @@ describe('Module Name', function () {
     });
 
     describe('getName', function () {
+        let sandbox;
+
+        beforeEach(function () {
+            sandbox = sinon.createSandbox();
+        });
+
+        afterEach(function () {
+            sandbox.restore();
+        });
 
         it('should return name of this package', function () {
             let name = moduleName.getName(0);
@@ -67,25 +76,25 @@ describe('Module Name', function () {
             name.should.equal('hmpo-logger');
         });
 
-        it('should return Unknown if getStack fails', sinon.test(function () {
-            this.stub(moduleName, 'getStack').returns(undefined);
+        it('should return Unknown if getStack fails', function () {
+            sandbox.stub(moduleName, 'getStack').returns(undefined);
             moduleName.getName().should.equal('Unknown');
-        }));
+        });
 
-        it('should return Unknown if getCallerFile fails', sinon.test(function () {
-            this.stub(moduleName, 'getCallerFile').returns(undefined);
+        it('should return Unknown if getCallerFile fails', function () {
+            sandbox.stub(moduleName, 'getCallerFile').returns(undefined);
             moduleName.getName().should.equal('Unknown');
-        }));
+        });
 
-        it('should return Unknown if getCallerPackageFile fails', sinon.test(function () {
-            this.stub(moduleName, 'getCallerPackageFile').returns(undefined);
+        it('should return Unknown if getCallerPackageFile fails', function () {
+            sandbox.stub(moduleName, 'getCallerPackageFile').returns(undefined);
             moduleName.getName().should.equal('Unknown');
-        }));
+        });
 
-        it('should return Unknown if an error is thrown', sinon.test(function () {
-            this.stub(moduleName, 'getCallerFile').throws(new Error('test error'));
+        it('should return Unknown if an error is thrown', function () {
+            sandbox.stub(moduleName, 'getCallerFile').throws(new Error('test error'));
             moduleName.getName().should.equal('Unknown');
-        }));
+        });
 
 
     });
